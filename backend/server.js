@@ -120,9 +120,14 @@ async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
         formData.append('description', description || `${name} token`);
         formData.append('showName', 'true');
         
-        if (sourceData?.url) {
-            formData.append('website', sourceData.url);
+        
+        if (sourceData?.url && typeof sourceData.url === 'string') {
+            const safeUrl = sourceData.url.trim();
+            if (safeUrl.startsWith('http://') || safeUrl.startsWith('https://')) {
+                formData.append('website', safeUrl);
+            }
         }
+
         
         formData.append('file', imageBuffer, {
             filename: 'token-image.png',
@@ -156,9 +161,14 @@ async function uploadMetadataOnly(name, symbol, description, sourceData) {
         formData.append('description', description || `${name} token`);
         formData.append('showName', 'true');
         
-        if (sourceData?.url) {
-            formData.append('website', sourceData.url);
+        
+        if (sourceData?.url && typeof sourceData.url === 'string') {
+            const safeUrl = sourceData.url.trim();
+            if (safeUrl.startsWith('http://') || safeUrl.startsWith('https://')) {
+                formData.append('website', safeUrl);
+            }
         }
+
 
         const response = await fetch('https://pump.fun/api/ipfs', {
             method: 'POST',
@@ -230,5 +240,3 @@ app.listen(PORT, () => {
         console.log('✅ PumpPortal API key configured');
     }
 });
-
-module.exports = app;

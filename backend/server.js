@@ -89,7 +89,7 @@ app.post('/api/coins/create', async (req, res) => {
             });
         }
 
-        console.log(`💰 Creating coin with ${amount} SOL dev buy, ${slippageValue}% slippage, ${priorityFeeValue} SOL priority fee`);
+        console.log(`💰 Creating coin with ${amount} SOL dev buy, ${slippageValue}% slippage, ${priorityFeeValue} SOL priority fee on ${platform}`);
 
         const mintKeypair = Keypair.generate();
         console.log('🔑 Generated token address:', mintKeypair.publicKey.toString());
@@ -98,9 +98,9 @@ app.post('/api/coins/create', async (req, res) => {
         
         if (image) {
             console.log('📤 Uploading image and metadata to IPFS...');
-            metadataUri = await uploadToIPFS(name, symbol, links, image, sourceData);
+            metadataUri = await uploadToIPFS(name, symbol, links, image, sourceData, platform);
         } else {
-            metadataUri = await uploadMetadataOnly(name, symbol, links, sourceData);
+            metadataUri = await uploadMetadataOnly(name, symbol, links, sourceData, platform);
         }
 
         console.log('🪙 Creating token on', platform);
@@ -158,7 +158,7 @@ app.post('/api/coins/create', async (req, res) => {
     }
 });
 
-async function uploadToIPFS(name, symbol, links, imageUrl, sourceData) {
+async function uploadToIPFS(name, symbol, links, imageUrl, sourceData, platform) {
     try {
         let imageBuffer;
         let contentType = 'image/png';
@@ -183,10 +183,92 @@ async function uploadToIPFS(name, symbol, links, imageUrl, sourceData) {
             console.log(`📦 Image downloaded: ${imageBuffer.length} bytes, type: ${contentType}`);
         }
 
+        // Use different IPFS endpoints based on platform
+        if (platform === 'letsbonk.fun') {
+            return await uploadToBonkIPFS(name, symbol, links, imageBuffer, contentType);
+        } else {
+            return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
+        }
+
+    } catch (error) {
+        console.error('❌ IPFS upload error:', error);
+        throw new Error(`IPFS upload failed: ${error.message}`);
+    }
+}
+
+async function uploadToBonkIPFS(name, symbol, links, imageBuffer, contentType) {
+    try {
+        console.log('🐕 Using Bonk IPFS storage...');
+        
+        // Step 1: Upload image to Bonk's IPFS
+        const imageFormData = new FormData();
+        imageFormData.append('file', imageBuffer, {
+            filename: 'token-image.png',
+            contentType: contentType
+        });
+
+        console.log('☁️ Uploading image to Bonk IPFS...');
+        const imageResponse = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/img', {
+            method: 'POST',
+            body: imageFormData
+        });
+
+        if (!imageResponse.ok) {
+            const errorText = await imageResponse.text();
+            console.error('Bonk Image Upload Error:', errorText);
+            throw new Error(`Bonk image upload failed: ${imageResponse.status} - ${errorText}`);
+        }
+
+        const imageUri = await imageResponse.text();
+        console.log('✅ Bonk image uploaded:', imageUri);
+
+        // Step 2: Upload metadata with image URI
+        const metadata = {
+            createdOn: "https://letsbonk.fun",
+            description: `${name} token created via Discord`,
+            image: imageUri,
+            name: name,
+            symbol: symbol
+        };
+
+        // Add social links to metadata
+        if (links) {
+            if (links.website) metadata.website = links.website;
+            if (links.twitter) metadata.twitter = links.twitter;
+            if (links.telegram) metadata.telegram = links.telegram;
+        }
+
+        console.log('☁️ Uploading metadata to Bonk IPFS...');
+        const metadataResponse = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/meta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(metadata)
+        });
+
+        if (!metadataResponse.ok) {
+            const errorText = await metadataResponse.text();
+            console.error('Bonk Metadata Upload Error:', errorText);
+            throw new Error(`Bonk metadata upload failed: ${metadataResponse.status} - ${errorText}`);
+        }
+
+        const metadataUri = await metadataResponse.text();
+        console.log('✅ Bonk metadata uploaded:', metadataUri);
+        return metadataUri;
+
+    } catch (error) {
+        console.error('❌ Bonk IPFS upload error:', error);
+        throw error;
+    }
+}
+
+async function uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType) {
+    try {
+        console.log('💊 Using Pump IPFS storage...');
+        
         const formData = new FormData();
         formData.append('name', name);
         formData.append('symbol', symbol);
-        formData.append('description', `${name} token`); // Simple description
+        formData.append('description', `${name} token`);
         formData.append('showName', 'true');
         
         // Add social links to metadata
@@ -210,7 +292,7 @@ async function uploadToIPFS(name, symbol, links, imageUrl, sourceData) {
             contentType: contentType
         });
 
-        console.log('☁️ Uploading to IPFS...');
+        console.log('☁️ Uploading to Pump IPFS...');
         const response = await fetch('https://pump.fun/api/ipfs', {
             method: 'POST',
             body: formData
@@ -218,53 +300,78 @@ async function uploadToIPFS(name, symbol, links, imageUrl, sourceData) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('IPFS Error Response:', errorText);
-            throw new Error(`IPFS upload failed: ${response.status} - ${errorText}`);
+            console.error('Pump IPFS Error Response:', errorText);
+            throw new Error(`Pump IPFS upload failed: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
-        console.log('✅ IPFS upload successful:', result.metadataUri);
+        console.log('✅ Pump IPFS upload successful:', result.metadataUri);
         return result.metadataUri;
 
     } catch (error) {
-        console.error('❌ IPFS upload error:', error);
-        throw new Error(`IPFS upload failed: ${error.message}`);
+        console.error('❌ Pump IPFS upload error:', error);
+        throw error;
     }
 }
 
-async function uploadMetadataOnly(name, symbol, links, sourceData) {
+async function uploadMetadataOnly(name, symbol, links, sourceData, platform) {
     try {
-        const formData = new FormData();
-        formData.append('name', name);
-        formData.append('symbol', symbol);
-        formData.append('description', `${name} token`);
-        formData.append('showName', 'true');
-        
-        // Add social links to metadata
-        if (links) {
-            if (links.website) {
-                formData.append('website', links.website);
+        if (platform === 'letsbonk.fun') {
+            // Bonk metadata without image
+            const metadata = {
+                createdOn: "https://letsbonk.fun",
+                description: `${name} token created via Discord`,
+                name: name,
+                symbol: symbol
+            };
+
+            // Add social links
+            if (links) {
+                if (links.website) metadata.website = links.website;
+                if (links.twitter) metadata.twitter = links.twitter;
+                if (links.telegram) metadata.telegram = links.telegram;
             }
-            if (links.twitter) {
-                formData.append('twitter', links.twitter);
+
+            const response = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/meta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(metadata)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Bonk metadata upload failed: ${response.status} - ${errorText}`);
             }
-            if (links.telegram) {
-                formData.append('telegram', links.telegram);
+
+            return await response.text();
+        } else {
+            // Pump metadata without image
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('symbol', symbol);
+            formData.append('description', `${name} token`);
+            formData.append('showName', 'true');
+            
+            // Add social links
+            if (links) {
+                if (links.website) formData.append('website', links.website);
+                if (links.twitter) formData.append('twitter', links.twitter);
+                if (links.telegram) formData.append('telegram', links.telegram);
             }
+
+            const response = await fetch('https://pump.fun/api/ipfs', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Pump metadata upload failed: ${response.status} - ${errorText}`);
+            }
+
+            const result = await response.json();
+            return result.metadataUri;
         }
-
-        const response = await fetch('https://pump.fun/api/ipfs', {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Metadata upload failed: ${response.status} - ${errorText}`);
-        }
-
-        const result = await response.json();
-        return result.metadataUri;
 
     } catch (error) {
         console.error('❌ Metadata upload error:', error);
@@ -288,7 +395,7 @@ async function createToken({ name, symbol, metadataUri, mintKeypair, platform, a
             amount: amount,
             slippage: slippage || 15,
             priorityFee: priorityFee || 0.0005,
-            pool: platform
+            pool: platform  // 'pump' or 'bonk'
         };
 
         console.log('📡 Sending request to PumpPortal:', {
@@ -296,7 +403,8 @@ async function createToken({ name, symbol, metadataUri, mintKeypair, platform, a
             mint: '[PRIVATE_KEY_HIDDEN]',
             amount: amount,
             slippage: slippage,
-            priorityFee: priorityFee
+            priorityFee: priorityFee,
+            pool: platform
         });
 
         const response = await fetch(`https://pumpportal.fun/api/trade?api-key=${PUMPPORTAL_API_KEY}`, {

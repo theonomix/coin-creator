@@ -37,9 +37,9 @@ app.post('/api/coins/create', async (req, res) => {
             });
         }
 
-        if (!['pump.fun', 'bonk.fun', 'demo'].includes(platform)) {
+        if (!['pump.fun', 'letsbonk.fun', 'demo'].includes(platform)) {
             return res.status(400).json({ 
-                error: 'Invalid platform. Must be pump.fun, bonk.fun, or demo' 
+                error: 'Invalid platform. Must be pump.fun, letsbonk.fun, or demo' 
             });
         }
 

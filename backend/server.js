@@ -29,7 +29,7 @@ app.post('/api/coins/create', async (req, res) => {
     try {
         console.log('🚀 Received coin creation request:', req.body);
 
-        const { name, symbol, description, image, platform, solAmount, sourceData } = req.body;
+        const { name, symbol, description, image, platform, solAmount, slippage, priorityFee, sourceData } = req.body;
 
         if (!name || !symbol || !platform) {
             return res.status(400).json({ 
@@ -63,8 +63,11 @@ app.post('/api/coins/create', async (req, res) => {
             });
         }
 
-        // Validate SOL amount
+        // Validate and set fee parameters
         const amount = parseFloat(solAmount);
+        const slippageValue = parseFloat(slippage) || 15;
+        const priorityFeeValue = parseFloat(priorityFee) || 0.0005;
+        
         if (isNaN(amount)) {
             return res.status(400).json({
                 error: 'Invalid SOL amount provided'
@@ -75,8 +78,18 @@ app.post('/api/coins/create', async (req, res) => {
                 error: 'SOL amount must be between 0 and 100'
             });
         }
+        if (slippageValue < 1 || slippageValue > 50) {
+            return res.status(400).json({
+                error: 'Slippage must be between 1 and 50 percent'
+            });
+        }
+        if (priorityFeeValue < 0 || priorityFeeValue > 0.01) {
+            return res.status(400).json({
+                error: 'Priority fee must be between 0 and 0.01 SOL'
+            });
+        }
 
-        console.log(`💰 Creating coin with ${amount} SOL dev buy`);
+        console.log(`💰 Creating coin with ${amount} SOL dev buy, ${slippageValue}% slippage, ${priorityFeeValue} SOL priority fee`);
 
         const mintKeypair = Keypair.generate();
         console.log('🔑 Generated token address:', mintKeypair.publicKey.toString());
@@ -97,7 +110,9 @@ app.post('/api/coins/create', async (req, res) => {
             metadataUri,
             mintKeypair,
             platform: platform === 'pump.fun' ? 'pump' : 'bonk',
-            amount
+            amount,
+            slippage: slippageValue,
+            priorityFee: priorityFeeValue
         });
 
         res.json({
@@ -145,13 +160,28 @@ app.post('/api/coins/create', async (req, res) => {
 
 async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
     try {
-        console.log('🖼️ Downloading image from:', imageUrl);
-        const imageResponse = await fetch(imageUrl);
-        if (!imageResponse.ok) {
-            throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`);
+        let imageBuffer;
+        let contentType = 'image/png';
+        
+        if (imageUrl.startsWith('data:')) {
+            // Handle base64 data URLs (uploaded/pasted images)
+            console.log('🖼️ Processing base64 image data...');
+            const base64Data = imageUrl.split(',')[1];
+            const mimeType = imageUrl.split(';')[0].split(':')[1];
+            contentType = mimeType || 'image/png';
+            imageBuffer = Buffer.from(base64Data, 'base64');
+            console.log(`📦 Base64 image processed: ${imageBuffer.length} bytes, type: ${contentType}`);
+        } else {
+            // Handle regular URLs (Discord images, etc.)
+            console.log('🖼️ Downloading image from URL:', imageUrl);
+            const imageResponse = await fetch(imageUrl);
+            if (!imageResponse.ok) {
+                throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`);
+            }
+            imageBuffer = await imageResponse.buffer();
+            contentType = imageResponse.headers.get('content-type') || 'image/png';
+            console.log(`📦 Image downloaded: ${imageBuffer.length} bytes, type: ${contentType}`);
         }
-        const imageBuffer = await imageResponse.buffer();
-        console.log(`📦 Image downloaded: ${imageBuffer.length} bytes`);
 
         const formData = new FormData();
         formData.append('name', name);
@@ -169,7 +199,7 @@ async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
 
         formData.append('file', imageBuffer, {
             filename: 'token-image.png',
-            contentType: imageResponse.headers.get('content-type') || 'image/png'
+            contentType: contentType
         });
 
         console.log('☁️ Uploading to IPFS...');
@@ -228,7 +258,7 @@ async function uploadMetadataOnly(name, symbol, description, sourceData) {
     }
 }
 
-async function createToken({ name, symbol, metadataUri, mintKeypair, platform, amount }) {
+async function createToken({ name, symbol, metadataUri, mintKeypair, platform, amount, slippage, priorityFee }) {
     try {
         const tokenMetadata = {
             name,
@@ -242,14 +272,17 @@ async function createToken({ name, symbol, metadataUri, mintKeypair, platform, a
             mint: bs58.encode(mintKeypair.secretKey),
             denominatedInSol: 'true',
             amount: amount,
-            slippage: 15,
-            priorityFee: 0.0005,
+            slippage: slippage || 15,
+            priorityFee: priorityFee || 0.0005,
             pool: platform
         };
 
         console.log('📡 Sending request to PumpPortal:', {
             ...requestBody,
-            mint: '[PRIVATE_KEY_HIDDEN]'
+            mint: '[PRIVATE_KEY_HIDDEN]',
+            amount: amount,
+            slippage: slippage,
+            priorityFee: priorityFee
         });
 
         const response = await fetch(`https://pumpportal.fun/api/trade?api-key=${PUMPPORTAL_API_KEY}`, {

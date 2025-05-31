@@ -185,7 +185,9 @@ async function uploadToIPFS(name, symbol, links, imageUrl, sourceData, platform)
 
         // Use different IPFS endpoints based on platform
         if (platform === 'letsbonk.fun') {
-            return await uploadToBonkIPFS(name, symbol, links, imageBuffer, contentType);
+            // For now, use pump.fun IPFS for bonk coins until we can fix the File upload issue
+            console.log('🐕 Using Pump IPFS for Bonk coins (temporary workaround)...');
+            return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
         } else {
             return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
         }
@@ -328,62 +330,32 @@ async function uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType) {
 
 async function uploadMetadataOnly(name, symbol, links, sourceData, platform) {
     try {
-        if (platform === 'letsbonk.fun') {
-            // Bonk metadata without image
-            const metadata = {
-                createdOn: "https://letsbonk.fun",
-                description: `${name} token created via Discord`,
-                name: name,
-                symbol: symbol
-            };
-
-            // Add social links
-            if (links) {
-                if (links.website) metadata.website = links.website;
-                if (links.twitter) metadata.twitter = links.twitter;
-                if (links.telegram) metadata.telegram = links.telegram;
-            }
-
-            const response = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/meta', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(metadata)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Bonk metadata upload failed: ${response.status} - ${errorText}`);
-            }
-
-            return await response.text();
-        } else {
-            // Pump metadata without image
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('symbol', symbol);
-            formData.append('description', `${name} token`);
-            formData.append('showName', 'true');
-            
-            // Add social links
-            if (links) {
-                if (links.website) formData.append('website', links.website);
-                if (links.twitter) formData.append('twitter', links.twitter);
-                if (links.telegram) formData.append('telegram', links.telegram);
-            }
-
-            const response = await fetch('https://pump.fun/api/ipfs', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Pump metadata upload failed: ${response.status} - ${errorText}`);
-            }
-
-            const result = await response.json();
-            return result.metadataUri;
+        // For both platforms, use pump.fun IPFS for now
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('symbol', symbol);
+        formData.append('description', `${name} token`);
+        formData.append('showName', 'true');
+        
+        // Add social links
+        if (links) {
+            if (links.website) formData.append('website', links.website);
+            if (links.twitter) formData.append('twitter', links.twitter);
+            if (links.telegram) formData.append('telegram', links.telegram);
         }
+
+        const response = await fetch('https://pump.fun/api/ipfs', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Metadata upload failed: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        return result.metadataUri;
 
     } catch (error) {
         console.error('❌ Metadata upload error:', error);

@@ -200,58 +200,70 @@ async function uploadToBonkIPFS(name, symbol, links, imageBuffer, contentType) {
     try {
         console.log('🐕 Using Bonk IPFS storage...');
         
-        // Step 1: Upload image to Bonk's IPFS
+        // Try different approach - match the Python example format
+        const files = {};
+        
+        // Create a proper File-like object for the form data
         const imageFormData = new FormData();
         imageFormData.append('file', imageBuffer, {
-            filename: 'token-image.png',
-            contentType: contentType
+            filename: 'example.png',
+            contentType: contentType || 'image/png'
         });
 
         console.log('☁️ Uploading image to Bonk IPFS...');
+        console.log('Image buffer size:', imageBuffer.length, 'bytes');
+        console.log('Content type:', contentType);
+        
         const imageResponse = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/img', {
             method: 'POST',
             body: imageFormData
         });
 
+        console.log('Image response status:', imageResponse.status);
+        const imageResponseText = await imageResponse.text();
+        console.log('Image response text:', imageResponseText);
+
         if (!imageResponse.ok) {
-            const errorText = await imageResponse.text();
-            console.error('Bonk Image Upload Error:', errorText);
-            throw new Error(`Bonk image upload failed: ${imageResponse.status} - ${errorText}`);
+            console.error('Bonk Image Upload Error:', imageResponseText);
+            throw new Error(`Bonk image upload failed: ${imageResponse.status} - ${imageResponseText}`);
         }
 
-        const imageUri = await imageResponse.text();
+        const imageUri = imageResponseText.trim();
         console.log('✅ Bonk image uploaded:', imageUri);
 
-        // Step 2: Upload metadata with image URI
+        // Step 2: Upload metadata exactly like the Python example
         const metadata = {
             createdOn: "https://letsbonk.fun",
             description: `${name} token created via Discord`,
             image: imageUri,
             name: name,
-            symbol: symbol
+            symbol: symbol,
+            website: links?.website || "https://letsbonk.fun"
         };
 
-        // Add social links to metadata
-        if (links) {
-            if (links.website) metadata.website = links.website;
-            if (links.twitter) metadata.twitter = links.twitter;
-            if (links.telegram) metadata.telegram = links.telegram;
-        }
+        // Add additional social links
+        if (links?.twitter) metadata.twitter = links.twitter;
+        if (links?.telegram) metadata.telegram = links.telegram;
 
-        console.log('☁️ Uploading metadata to Bonk IPFS...');
+        console.log('☁️ Uploading metadata to Bonk IPFS...', JSON.stringify(metadata, null, 2));
         const metadataResponse = await fetch('https://nft-storage.letsbonk22.workers.dev/upload/meta', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(metadata)
         });
 
+        console.log('Metadata response status:', metadataResponse.status);
+        const metadataResponseText = await metadataResponse.text();
+        console.log('Metadata response text:', metadataResponseText);
+
         if (!metadataResponse.ok) {
-            const errorText = await metadataResponse.text();
-            console.error('Bonk Metadata Upload Error:', errorText);
-            throw new Error(`Bonk metadata upload failed: ${metadataResponse.status} - ${errorText}`);
+            console.error('Bonk Metadata Upload Error:', metadataResponseText);
+            throw new Error(`Bonk metadata upload failed: ${metadataResponse.status} - ${metadataResponseText}`);
         }
 
-        const metadataUri = await metadataResponse.text();
+        const metadataUri = metadataResponseText.trim();
         console.log('✅ Bonk metadata uploaded:', metadataUri);
         return metadataUri;
 

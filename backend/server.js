@@ -183,14 +183,9 @@ async function uploadToIPFS(name, symbol, links, imageUrl, sourceData, platform)
             console.log(`📦 Image downloaded: ${imageBuffer.length} bytes, type: ${contentType}`);
         }
 
-        // Use different IPFS endpoints based on platform
-        if (platform === 'letsbonk.fun') {
-            // For now, use pump.fun IPFS for bonk coins until we can fix the File upload issue
-            console.log('🐕 Using Pump IPFS for Bonk coins (temporary workaround)...');
-            return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
-        } else {
-            return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
-        }
+        // Use pump.fun IPFS for both platforms (bonk IPFS has File upload issues)
+        console.log(`📤 Using Pump IPFS for ${platform} platform...`);
+        return await uploadToPumpIPFS(name, symbol, links, imageBuffer, contentType);
 
     } catch (error) {
         console.error('❌ IPFS upload error:', error);

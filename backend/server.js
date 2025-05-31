@@ -29,7 +29,7 @@ app.post('/api/coins/create', async (req, res) => {
     try {
         console.log('🚀 Received coin creation request:', req.body);
 
-        const { name, symbol, description, image, platform, solAmount, slippage, priorityFee, sourceData } = req.body;
+        const { name, symbol, image, platform, solAmount, slippage, priorityFee, links, sourceData } = req.body;
 
         if (!name || !symbol || !platform) {
             return res.status(400).json({ 
@@ -98,9 +98,9 @@ app.post('/api/coins/create', async (req, res) => {
         
         if (image) {
             console.log('📤 Uploading image and metadata to IPFS...');
-            metadataUri = await uploadToIPFS(name, symbol, description, image, sourceData);
+            metadataUri = await uploadToIPFS(name, symbol, links, image, sourceData);
         } else {
-            metadataUri = await uploadMetadataOnly(name, symbol, description, sourceData);
+            metadataUri = await uploadMetadataOnly(name, symbol, links, sourceData);
         }
 
         console.log('🪙 Creating token on', platform);
@@ -158,7 +158,7 @@ app.post('/api/coins/create', async (req, res) => {
     }
 });
 
-async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
+async function uploadToIPFS(name, symbol, links, imageUrl, sourceData) {
     try {
         let imageBuffer;
         let contentType = 'image/png';
@@ -186,14 +186,22 @@ async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
         const formData = new FormData();
         formData.append('name', name);
         formData.append('symbol', symbol);
-        formData.append('description', description || `${name} token`);
+        formData.append('description', `${name} token`); // Simple description
         formData.append('showName', 'true');
         
-        if (sourceData?.links && sourceData.links.length > 0) {
-            const url = sourceData.links[0];
-            if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-                formData.append('website', url);
-                console.log('🔗 Added website:', url);
+        // Add social links to metadata
+        if (links) {
+            if (links.website) {
+                formData.append('website', links.website);
+                console.log('🌐 Added website:', links.website);
+            }
+            if (links.twitter) {
+                formData.append('twitter', links.twitter);
+                console.log('🐦 Added Twitter:', links.twitter);
+            }
+            if (links.telegram) {
+                formData.append('telegram', links.telegram);
+                console.log('💬 Added Telegram:', links.telegram);
             }
         }
 
@@ -224,18 +232,24 @@ async function uploadToIPFS(name, symbol, description, imageUrl, sourceData) {
     }
 }
 
-async function uploadMetadataOnly(name, symbol, description, sourceData) {
+async function uploadMetadataOnly(name, symbol, links, sourceData) {
     try {
         const formData = new FormData();
         formData.append('name', name);
         formData.append('symbol', symbol);
-        formData.append('description', description || `${name} token`);
+        formData.append('description', `${name} token`);
         formData.append('showName', 'true');
         
-        if (sourceData?.links && sourceData.links.length > 0) {
-            const url = sourceData.links[0];
-            if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-                formData.append('website', url);
+        // Add social links to metadata
+        if (links) {
+            if (links.website) {
+                formData.append('website', links.website);
+            }
+            if (links.twitter) {
+                formData.append('twitter', links.twitter);
+            }
+            if (links.telegram) {
+                formData.append('telegram', links.telegram);
             }
         }
 
